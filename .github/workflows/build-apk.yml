@@ -31,7 +31,9 @@ jobs:
 
       - name: Install Android SDK packages
         run: |
-          yes | sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          yes | sdkmanager --licenses
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -57,7 +59,8 @@ jobs:
           fi
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          - name: Create debug signing key
+
+      - name: Create debug signing key
         run: |
           keytool -genkeypair -v \
             -keystore "$PROJECT_DIR/debug.keystore" \
