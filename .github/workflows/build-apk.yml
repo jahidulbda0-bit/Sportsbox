@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build:
-    name: Build Android APK
+    name: Build Sports BoX
     runs-on: ubuntu-latest
 
     steps:
@@ -24,40 +24,53 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Extract Smart Link Source ZIP
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Extract Android Project
         run: |
-          ZIP_FILE=$(find . -maxdepth 3 -type f -iname '*SmartLink*.zip' | head -n 1)
+          ZIP_FILE=$(find . -type f -iname '*SmartLink*.zip' | head -n 1)
 
-          if [ -n "$ZIP_FILE" ]; then
-            mkdir -p app-source
-            unzip -q "$ZIP_FILE" -d app-source
-            echo "SOURCE_DIR=$GITHUB_WORKSPACE/app-source" >> $GITHUB_ENV
-          else
-            echo "No SmartLink ZIP found. Using repository files."
-            echo "SOURCE_DIR=$GITHUB_WORKSPACE" >> $GITHUB_ENV
-          fi
-
-      - name: Locate Gradle Project
-        run: |
-          GRADLE_FILE=$(find "$SOURCE_DIR" -type f -name gradlew | head -n 1)
-
-          if [ -z "$GRADLE_FILE" ]; then
-            echo "ERROR: gradlew not found in source ZIP."
+          if [ -z "$ZIP_FILE" ]; then
+            echo "SmartLink ZIP not found!"
             exit 1
           fi
 
-          echo "PROJECT_DIR=$(dirname "$GRADLE_FILE")" >> $GITHUB_ENV
+          mkdir -p app-source
+          unzip -q "$ZIP_FILE" -d app-source
 
-      - name: Build Debug APK
+          PROJECT_FILE=$(find app-source -type f -name settings.gradle.kts | head -n 1)
+
+          if [ -z "$PROJECT_FILE" ]; then
+            echo "Android project not found!"
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$PROJECT_FILE")
+          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
+
+      - name: Prepare Debug Keystore
+        run: |
+          keytool -genkeypair \
+            -keystore "$PROJECT_DIR/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US" \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000
+
+      - name: Build APK
         run: |
           cd "$PROJECT_DIR"
-          chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          gradle assembleDebug --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Sports-BoX-APK
-          path: |
-            ${{ env.PROJECT_DIR }}/**/build/outputs/apk/debug/*.apk
+          path: app-source/**/build/outputs/apk/debug/*.apk
           if-no-files-found: error
