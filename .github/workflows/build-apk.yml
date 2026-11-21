@@ -26,10 +26,12 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       - name: Install Android SDK packages
         run: |
-          sdkmanager --licenses
+          yes | sdkmanager --licenses
           sdkmanager "platform-tools" "platforms;android-36-ext1" "build-tools;36.0.0"
 
       - name: Set up Gradle
@@ -41,28 +43,32 @@ jobs:
         run: |
           mkdir project
           unzip -q "sports-boxbox (1).zip" -d project
-          test -f project/settings.gradle.kts
-          test -f project/app/build.gradle.kts
-          test -f project/gradle/libs.versions.toml
 
-      - name: Create debug signing key
-        run: |
-          keytool -genkeypair -v \
-            -keystore project/debug.keystore \
-            -storepass android \
-            -alias androiddebugkey \
-            -keypass android \
-            -dname "CN=Android Debug,O=Android,C=US" \
-            -keyalg RSA -keysize 2048 -validity 10000
+          SETTINGS=$(find project -name settings.gradle.kts -print -quit)
+
+          if [ -z "$SETTINGS" ]; then
+            echo "settings.gradle.kts not found"
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$SETTINGS")
+
+          if [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
+            echo "App Gradle file not found"
+            exit 1
+          fi
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
       - name: Build APK
         run: |
-          gradle -p project :app:assembleDebug --no-daemon --stacktrace
+          gradle -p "$PROJECT_DIR" :app:assembleDebug \
+            --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Sportsbox-APK
-          path: project/app/build/outputs/apk/debug/*.apk
+          path: project/**/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
