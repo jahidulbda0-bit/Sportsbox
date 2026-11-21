@@ -3,98 +3,61 @@ name: Build Sports BoX APK
 on:
   workflow_dispatch:
   push:
-    paths:
-      - 'Sports-BoX-Popunder-Fixed-Source.zip'
-      - '.github/workflows/build-apk.yml'
+    branches:
+      - main
 
 permissions:
   contents: read
 
 jobs:
   build:
+    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: platform-tools
-
-      - name: Install Android SDK packages
+      - name: Extract Smart Link Source ZIP
         run: |
-          yes | sdkmanager --licenses
-          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          ZIP_FILE=$(find . -maxdepth 3 -type f -iname '*SmartLink*.zip' | head -n 1)
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '9.3.1'
+          if [ -n "$ZIP_FILE" ]; then
+            mkdir -p app-source
+            unzip -q "$ZIP_FILE" -d app-source
+            echo "SOURCE_DIR=$GITHUB_WORKSPACE/app-source" >> $GITHUB_ENV
+          else
+            echo "No SmartLink ZIP found. Using repository files."
+            echo "SOURCE_DIR=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+          fi
 
-      - name: Extract Android project
+      - name: Locate Gradle Project
         run: |
-          mkdir -p project
+          GRADLE_FILE=$(find "$SOURCE_DIR" -type f -name gradlew | head -n 1)
 
-          ZIP_FILE="Sports-BoX-Popunder-Fixed-Source.zip"
-
-          if [ ! -f "$ZIP_FILE" ]; then
-            echo "Project ZIP not found!"
+          if [ -z "$GRADLE_FILE" ]; then
+            echo "ERROR: gradlew not found in source ZIP."
             exit 1
           fi
 
-          echo "Using ZIP: $ZIP_FILE"
-          unzip -q "$ZIP_FILE" -d project
+          echo "PROJECT_DIR=$(dirname "$GRADLE_FILE")" >> $GITHUB_ENV
 
-          SETTINGS=$(find project -name settings.gradle.kts -print -quit)
-
-          if [ -z "$SETTINGS" ]; then
-            SETTINGS=$(find project -name settings.gradle -print -quit)
-          fi
-
-          if [ -z "$SETTINGS" ]; then
-            echo "Gradle settings file not found!"
-            find project -maxdepth 4 -type f | head -100
-            exit 1
-          fi
-
-          PROJECT_DIR=$(dirname "$SETTINGS")
-
-          if [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ] && [ ! -f "$PROJECT_DIR/app/build.gradle" ]; then
-            echo "App Gradle file not found!"
-            exit 1
-          fi
-
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-
-      - name: Create debug signing key
+      - name: Build Debug APK
         run: |
-          keytool -genkeypair -v \
-            -keystore "$PROJECT_DIR/debug.keystore" \
-            -storepass android \
-            -alias androiddebugkey \
-            -keypass android \
-            -dname "CN=Android Debug,O=Android,C=US" \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000
-
-      - name: Build APK
-        run: |
-          gradle -p "$PROJECT_DIR" :app:assembleDebug \
-            --no-daemon --stacktrace
+          cd "$PROJECT_DIR"
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Sports-BoX-Popunder-APK
-          path: project/**/build/outputs/apk/debug/*.apk
+          name: Sports-BoX-APK
+          path: |
+            ${{ env.PROJECT_DIR }}/**/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-          retention-days: 14
