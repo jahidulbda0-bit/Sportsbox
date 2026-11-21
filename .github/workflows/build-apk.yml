@@ -1,0 +1,46 @@
+name: Build Sportsbox APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'sports-boxbox (1).zip'
+      - '.github/workflows/build-apk.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Extract project
+        run: |
+          mkdir project
+          unzip -q "sports-boxbox (1).zip" -d project
+          find project -name gradlew -type f
+
+      - name: Build APK
+        run: |
+          cd project
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sportsbox-APK
+          path: project/**/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
