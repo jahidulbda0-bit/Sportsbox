@@ -5,20 +5,22 @@ on:
   push:
     branches:
       - main
+    paths:
+      - '**'
+      - '.github/workflows/build-apk.yml'
 
 permissions:
   contents: read
 
 jobs:
   build:
-    name: Build Sports BoX
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Java 17
+      - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -26,51 +28,16 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '9.3.1'
 
-      - name: Extract Android Project
-        run: |
-          ZIP_FILE=$(find . -type f -iname '*SmartLink*.zip' | head -n 1)
+      - name: Grant Execute Permission
+        run: chmod +x gradlew
 
-          if [ -z "$ZIP_FILE" ]; then
-            echo "SmartLink ZIP not found!"
-            exit 1
-          fi
-
-          mkdir -p app-source
-          unzip -q "$ZIP_FILE" -d app-source
-
-          PROJECT_FILE=$(find app-source -type f -name settings.gradle.kts | head -n 1)
-
-          if [ -z "$PROJECT_FILE" ]; then
-            echo "Android project not found!"
-            exit 1
-          fi
-
-          PROJECT_DIR=$(dirname "$PROJECT_FILE")
-          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
-
-      - name: Prepare Debug Keystore
-        run: |
-          keytool -genkeypair \
-            -keystore "$PROJECT_DIR/debug.keystore" \
-            -storepass android \
-            -alias androiddebugkey \
-            -keypass android \
-            -dname "CN=Android Debug,O=Android,C=US" \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000
-
-      - name: Build APK
-        run: |
-          cd "$PROJECT_DIR"
-          gradle assembleDebug --no-daemon --stacktrace
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Sports-BoX-APK
-          path: app-source/**/build/outputs/apk/debug/*.apk
+          name: Sports-BoX-Embed-Fixed-APK
+          path: '**/build/outputs/apk/debug/*.apk'
           if-no-files-found: error
