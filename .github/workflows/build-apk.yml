@@ -1,3 +1,4 @@
+
 name: Build Sports BoX APK
 
 on:
@@ -50,29 +51,67 @@ jobs:
           \) | head -n 1)
 
           if [ -z "$PROJECT_FILE" ]; then
-            echo "ERROR: settings.gradle not found!"
-            find app-source -maxdepth 4 -type f | head -100
+            echo "ERROR: Android project not found!"
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$PROJECT_FILE")
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-          echo "Android project: $PROJECT_DIR"
+          echo "Project found: $PROJECT_DIR"
+
+      - name: Generate Debug Keystore
+        run: |
+          set -e
+
+          cd "$PROJECT_DIR"
+
+          if [ ! -f debug.keystore ]; then
+            keytool -genkeypair \
+              -v \
+              -keystore debug.keystore \
+              -storetype JKS \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US" \
+              -noprompt
+          fi
+
+          test -f debug.keystore
+          echo "Debug Keystore ready!"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build Debug APK
         run: |
+          set -e
           cd "$PROJECT_DIR"
 
-          if [ -f gradlew ]; then
-            chmod +x gradlew
-            ./gradlew assembleDebug --no-daemon --stacktrace
-          else
-            gradle assembleDebug --no-daemon --stacktrace
+          chmod +x gradlew
+
+          ./gradlew assembleDebug \
+            --no-daemon \
+            --stacktrace
+
+      - name: Verify APK
+        run: |
+          set -e
+
+          APK=$(find "$PROJECT_DIR/app/build/outputs/apk/debug" \
+            -type f -name '*.apk' | head -n 1)
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK was not generated!"
+            exit 1
           fi
+
+          echo "APK generated successfully:"
+          ls -lh "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -80,3 +119,4 @@ jobs:
           name: Sports-BoX-APK
           path: app-source/**/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+          retention-days: 7
